@@ -131,17 +131,17 @@ jobs:
           WASM_FILE=$BUILDDIR/starling$( [[ "${{ matrix.variant }}" == "debug" ]] && echo "-debug" || echo "" ).wasm
 
           # Embed version metadata into WASM binary
-          wasm-tools metadata add \\
-            --language "rust=1.91.1" \\
-            --processed-by "starlingmonkey=${{ steps.version_info.outputs.starling_version }}" \\
-            --processed-by "spidermonkey=${{ steps.version_info.outputs.spidermonkey_version }}" \\
-            --processed-by "wasmtime=v38.0.4" \\
-            --sdk "wasi-sdk=28" \\
-            --sdk "openssl=3.0.18" \\
-            --revision "${{ steps.version_info.outputs.commit }}" \\
-            --homepage "https://github.com/tonidy/StarlingMonkey" \\
-            --description "StarlingMonkey: A SpiderMonkey-based JavaScript runtime for Wasm" \\
-            --version "${{ steps.version_info.outputs.starling_version }}" \\
+          wasm-tools metadata add \
+            --language "rust=1.91.1" \
+            --processed-by "starlingmonkey=${{ steps.version_info.outputs.starling_version }}" \
+            --processed-by "spidermonkey=${{ steps.version_info.outputs.spidermonkey_version }}" \
+            --processed-by "wasmtime=v38.0.4" \
+            --sdk "wasi-sdk=28" \
+            --sdk "openssl=3.0.18" \
+            --revision "${{ steps.version_info.outputs.commit }}" \
+            --homepage "https://github.com/tonidy/StarlingMonkey" \
+            --description "StarlingMonkey: A SpiderMonkey-based JavaScript runtime for Wasm" \
+            --version "${{ steps.version_info.outputs.starling_version }}" \
             "$WASM_FILE" -o "$WASM_FILE"
 
           echo "✓ Version metadata embedded in WASM binary"
