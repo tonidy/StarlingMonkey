@@ -77,14 +77,21 @@ jobs:
             cp ${{ matrix.builddir }}/preview1-adapter.wasm wasm-artifacts/
           fi
 
-          echo "WASM artifacts:"
+          # Show original sizes
+          echo "=== Original artifact sizes ==="
           ls -lh wasm-artifacts/
+
+      - name: Create Compressed Archive
+        if: matrix.variant == 'release' || (matrix.variant == 'debug' && steps.check_debug.outputs.build_debug == 'true')
+        run: |
+          tar -czf starling-wasm-${{ matrix.variant }}.tar.gz -C wasm-artifacts .
+          echo "=== Compressed archive size ==="
+          ls -lh starling-wasm-${{ matrix.variant }}.tar.gz
 
       - name: Upload WASM Artifacts
         if: matrix.variant == 'release' || (matrix.variant == 'debug' && steps.check_debug.outputs.build_debug == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: starling-wasm-${{ matrix.variant }}
-          path: wasm-artifacts/*
+          path: starling-wasm-${{ matrix.variant }}.tar.gz
           retention-days: 7
-          compression-level: 9
