@@ -87,6 +87,53 @@ jobs:
           echo "=== Original artifact sizes ==="
           ls -lh wasm-artifacts/
 
+      - name: Extract Version Info
+        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        id: version_info
+        run: |
+          # Get StarlingMonkey version
+          STARLING_VERSION=$(jq -r '.[""]' .release-please-manifest.json)
+          echo "starling_version=$STARLING_VERSION" >> $GITHUB_OUTPUT
+
+          # Get SpiderMonkey version
+          SM_TAG=$(grep "^set(SM_TAG" cmake/spidermonkey.cmake | sed 's/.*SM_TAG \([^)]*\).*/\1/')
+          echo "spidermonkey_version=$SM_TAG" >> $GITHUB_OUTPUT
+
+          # Get git commit
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+
+          # Get build timestamp
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "build_time=$BUILD_TIME" >> $GITHUB_OUTPUT
+
+          echo "Version Info:"
+          echo "  StarlingMonkey: $STARLING_VERSION"
+          echo "  SpiderMonkey: $SM_TAG"
+          echo "  Commit: $COMMIT"
+          echo "  Built: $BUILD_TIME"
+
+      - name: Embed Version Metadata in WASM
+        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        run: |
+          BUILDDIR=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "build-release" || echo "build-debug" )
+          WASM_FILE=$BUILDDIR/starling$( [[ "${{ matrix.variant }}" == "debug" ]] && echo "-debug" || echo "" ).wasm
+
+          # Embed version metadata into WASM binary
+          wasm-tools metadata add \
+            --producer "starlingmonkey:${{ steps.version_info.outputs.starling_version }}" \
+            --producer "spidermonkey:${{ steps.version_info.outputs.spidermonkey_version }}" \
+            --producer "wasmtime:v38.0.4" \
+            --producer "wasi-sdk:28" \
+            --producer "rust:1.91.1" \
+            --producer "openssl:3.0.18" \
+            --producer "commit:${{ steps.version_info.outputs.commit }}" \
+            --producer "built:${{ steps.version_info.outputs.build_time }}" \
+            "$WASM_FILE" -o "$WASM_FILE"
+
+          echo "✓ Version metadata embedded in WASM binary"
+          wasm-tools metadata show "$WASM_FILE" | grep "processed-by" | head -10
+
       - name: Create Compressed Archive
         if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
         run: |
