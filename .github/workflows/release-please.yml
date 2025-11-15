@@ -34,7 +34,7 @@ jobs:
       contents: write
     strategy:
       matrix:
-        rust-version: ['1.80.0']
+        rust-version: ['1.91.1']
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

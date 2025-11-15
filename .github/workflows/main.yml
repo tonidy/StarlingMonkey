@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, upgrade-tools]
+    branches: [main]
     paths-ignore:
       - '*.md'
       - 'docs/**'
