@@ -52,7 +52,7 @@ jobs:
         if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
         run: |
           rustup toolchain install ${{ matrix.rust-version }}
-          rustup target add wasm32-wasip1 --toolchain ${{ matrix.rust-version }}
+          rustup target add wasm32-wasip2 --toolchain ${{ matrix.rust-version }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 #v4.4.0
         if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
