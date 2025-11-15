@@ -1,0 +1,63 @@
+name: Build WASM
+
+on:
+  push:
+    branches: [upgrade-tools]
+  workflow_dispatch:
+
+jobs:
+  build-wasm:
+    name: Build and Upload WASM Artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        rust-version: ['1.91.1']
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Just
+        uses: taiki-e/install-action@just
+
+      - name: Install Rust ${{ matrix.rust-version }}
+        run: |
+          rustup toolchain install ${{ matrix.rust-version }}
+          rustup target add wasm32-wasip1 --toolchain ${{ matrix.rust-version }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 #v4.4.0
+        with:
+          node-version: 'lts/*'
+
+      - name: Build Release Variant
+        run: |
+          just mode=release builddir=build-release build starling
+
+      - name: Build Debug Variant
+        run: |
+          just mode=relwithdebinfo builddir=build-debug build starling
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p wasm-artifacts
+
+          # Core-module versions of the runtime
+          cp build-release/starling-raw.wasm wasm-artifacts/starling-raw.wasm
+          cp build-debug/starling-raw.wasm wasm-artifacts/starling-raw-debug.wasm
+
+          # Component-versions of the runtime
+          cp build-release/starling.wasm wasm-artifacts/starling.wasm
+          cp build-debug/starling.wasm wasm-artifacts/starling-debug.wasm
+
+          # Supporting artifacts
+          cp build-release/preview1-adapter.wasm wasm-artifacts/
+
+          echo "WASM artifacts:"
+          ls -lh wasm-artifacts/
+
+      - name: Upload WASM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: starling-wasm-artifacts
+          path: wasm-artifacts/*
+          retention-days: 7
