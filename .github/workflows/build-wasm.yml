@@ -48,6 +48,10 @@ jobs:
         if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
         uses: taiki-e/install-action@just
 
+      - name: Install wasm-tools
+        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        uses: taiki-e/install-action@wasm-tools
+
       - name: Install Rust ${{ matrix.rust-version }}
         if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
         run: |
@@ -99,6 +103,10 @@ jobs:
           SM_TAG=$(grep "^set(SM_TAG" cmake/spidermonkey.cmake | sed 's/.*SM_TAG \([^)]*\).*/\1/')
           echo "spidermonkey_version=$SM_TAG" >> $GITHUB_OUTPUT
 
+          # Get Rust version
+          RUST_VERSION=$(rustc --version | awk '{print $2}')
+          echo "rust_version=$RUST_VERSION" >> $GITHUB_OUTPUT
+
           # Get git commit
           COMMIT=$(git rev-parse --short HEAD)
           echo "commit=$COMMIT" >> $GITHUB_OUTPUT
@@ -110,6 +118,7 @@ jobs:
           echo "Version Info:"
           echo "  StarlingMonkey: $STARLING_VERSION"
           echo "  SpiderMonkey: $SM_TAG"
+          echo "  Rust: $RUST_VERSION"
           echo "  Commit: $COMMIT"
           echo "  Built: $BUILD_TIME"
 
