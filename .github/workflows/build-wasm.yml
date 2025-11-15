@@ -50,7 +50,9 @@ jobs:
 
       - name: Install wasm-tools
         if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
-        uses: taiki-e/install-action@wasm-tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-tools
 
       - name: Install Rust ${{ matrix.rust-version }}
         if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
