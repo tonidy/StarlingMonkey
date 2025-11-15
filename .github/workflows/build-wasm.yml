@@ -98,7 +98,7 @@ jobs:
         id: version_info
         run: |
           # Get StarlingMonkey version
-          STARLING_VERSION=$(jq -r '.[""]' .release-please-manifest.json)
+          STARLING_VERSION=$(jq -r '.["."]' .release-please-manifest.json)
           echo "starling_version=$STARLING_VERSION" >> $GITHUB_OUTPUT
 
           # Get SpiderMonkey version
@@ -132,12 +132,12 @@ jobs:
 
           # Embed version metadata into WASM binary
           wasm-tools metadata add \\
-            --language "rust" "1.91.1" \\
-            --processed-by "starlingmonkey" "${{ steps.version_info.outputs.starling_version }}" \\
-            --processed-by "spidermonkey" "${{ steps.version_info.outputs.spidermonkey_version }}" \\
-            --processed-by "wasmtime" "v38.0.4" \\
-            --sdk "wasi-sdk" "28" \\
-            --sdk "openssl" "3.0.18" \\
+            --language "rust=1.91.1" \\
+            --processed-by "starlingmonkey=${{ steps.version_info.outputs.starling_version }}" \\
+            --processed-by "spidermonkey=${{ steps.version_info.outputs.spidermonkey_version }}" \\
+            --processed-by "wasmtime=v38.0.4" \\
+            --sdk "wasi-sdk=28" \\
+            --sdk "openssl=3.0.18" \\
             --revision "${{ steps.version_info.outputs.commit }}" \\
             --homepage "https://github.com/tonidy/StarlingMonkey" \\
             --description "StarlingMonkey: A SpiderMonkey-based JavaScript runtime for Wasm" \\
