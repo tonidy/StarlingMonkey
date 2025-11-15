@@ -15,26 +15,13 @@ on:
           - 'true'
 
 jobs:
-  build-wasm:
-    name: Build WASM (${{ matrix.variant }})
+  check-build-flags:
+    name: Check Build Flags
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    strategy:
-      matrix:
-        rust-version: ['1.91.1']
-        include:
-          - variant: 'release'
-            mode: 'release'
-            builddir: 'build-release'
-          - variant: 'debug'
-            mode: 'relwithdebinfo'
-            builddir: 'build-debug'
-    exclude:
-      - variant: 'debug'
+    outputs:
+      build_release: 'true'
+      build_debug: ${{ steps.check_debug.outputs.build_debug }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
       - name: Check if debug build requested
         id: check_debug
         run: |
@@ -43,6 +30,25 @@ jobs:
           else
             echo "build_debug=false" >> $GITHUB_OUTPUT
           fi
+
+  build-wasm:
+    name: Build WASM (${{ matrix.variant }})
+    needs: check-build-flags
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        rust-version: ['1.91.1']
+        variant: ['release', 'debug']
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Skip if debug not requested
+        if: matrix.variant == 'debug' && needs.check-build-flags.outputs.build_debug != 'true'
+        run: |
+          echo "Skipping debug build (not requested)"
+          exit 0
 
       - name: Install Just
         uses: taiki-e/install-action@just
@@ -57,24 +63,27 @@ jobs:
           node-version: 'lts/*'
 
       - name: Build ${{ matrix.variant }} Variant
-        if: matrix.variant == 'release' || (matrix.variant == 'debug' && steps.check_debug.outputs.build_debug == 'true')
+        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
         run: |
-          just mode=${{ matrix.mode }} builddir=${{ matrix.builddir }} build starling
+          MODE=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "release" || echo "relwithdebinfo" )
+          BUILDDIR=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "build-release" || echo "build-debug" )
+          just mode=$MODE builddir=$BUILDDIR build starling
 
       - name: Prepare Artifacts
-        if: matrix.variant == 'release' || (matrix.variant == 'debug' && steps.check_debug.outputs.build_debug == 'true')
+        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
         run: |
           mkdir -p wasm-artifacts
+          BUILDDIR=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "build-release" || echo "build-debug" )
 
           # Core-module versions of the runtime
-          cp ${{ matrix.builddir }}/starling-raw.wasm wasm-artifacts/starling-raw${{ matrix.variant != 'release' && '-debug' || '' }}.wasm
+          cp $BUILDDIR/starling-raw.wasm wasm-artifacts/starling-raw$( [[ "${{ matrix.variant }}" == "debug" ]] && echo "-debug" || echo "" ).wasm
 
           # Component-versions of the runtime
-          cp ${{ matrix.builddir }}/starling.wasm wasm-artifacts/starling${{ matrix.variant != 'release' && '-debug' || '' }}.wasm
+          cp $BUILDDIR/starling.wasm wasm-artifacts/starling$( [[ "${{ matrix.variant }}" == "debug" ]] && echo "-debug" || echo "" ).wasm
 
           # Supporting artifacts (only from release)
           if [[ "${{ matrix.variant }}" == "release" ]]; then
-            cp ${{ matrix.builddir }}/preview1-adapter.wasm wasm-artifacts/
+            cp $BUILDDIR/preview1-adapter.wasm wasm-artifacts/
           fi
 
           # Show original sizes
@@ -82,14 +91,14 @@ jobs:
           ls -lh wasm-artifacts/
 
       - name: Create Compressed Archive
-        if: matrix.variant == 'release' || (matrix.variant == 'debug' && steps.check_debug.outputs.build_debug == 'true')
+        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
         run: |
           tar -czf starling-wasm-${{ matrix.variant }}.tar.gz -C wasm-artifacts .
           echo "=== Compressed archive size ==="
           ls -lh starling-wasm-${{ matrix.variant }}.tar.gz
 
       - name: Upload WASM Artifacts
-        if: matrix.variant == 'release' || (matrix.variant == 'debug' && steps.check_debug.outputs.build_debug == 'true')
+        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: starling-wasm-${{ matrix.variant }}
