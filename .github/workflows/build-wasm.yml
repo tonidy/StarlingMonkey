@@ -4,18 +4,45 @@ on:
   push:
     branches: [upgrade-tools]
   workflow_dispatch:
+    inputs:
+      build_debug:
+        description: 'Also build debug variant (increases build time to ~15 mins)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   build-wasm:
-    name: Build and Upload WASM Artifacts
+    name: Build WASM (${{ matrix.variant }})
     runs-on: ubuntu-latest
     permissions:
       contents: write
     strategy:
       matrix:
         rust-version: ['1.91.1']
+        include:
+          - variant: 'release'
+            mode: 'release'
+            builddir: 'build-release'
+          - variant: 'debug'
+            mode: 'relwithdebinfo'
+            builddir: 'build-debug'
+    exclude:
+      - variant: 'debug'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check if debug build requested
+        id: check_debug
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.build_debug }}" == "true" ]]; then
+            echo "build_debug=true" >> $GITHUB_OUTPUT
+          else
+            echo "build_debug=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install Just
         uses: taiki-e/install-action@just
@@ -29,35 +56,35 @@ jobs:
         with:
           node-version: 'lts/*'
 
-      - name: Build Release Variant
+      - name: Build ${{ matrix.variant }} Variant
+        if: matrix.variant == 'release' || (matrix.variant == 'debug' && steps.check_debug.outputs.build_debug == 'true')
         run: |
-          just mode=release builddir=build-release build starling
-
-      - name: Build Debug Variant
-        run: |
-          just mode=relwithdebinfo builddir=build-debug build starling
+          just mode=${{ matrix.mode }} builddir=${{ matrix.builddir }} build starling
 
       - name: Prepare Artifacts
+        if: matrix.variant == 'release' || (matrix.variant == 'debug' && steps.check_debug.outputs.build_debug == 'true')
         run: |
           mkdir -p wasm-artifacts
 
           # Core-module versions of the runtime
-          cp build-release/starling-raw.wasm wasm-artifacts/starling-raw.wasm
-          cp build-debug/starling-raw.wasm wasm-artifacts/starling-raw-debug.wasm
+          cp ${{ matrix.builddir }}/starling-raw.wasm wasm-artifacts/starling-raw${{ matrix.variant != 'release' && '-debug' || '' }}.wasm
 
           # Component-versions of the runtime
-          cp build-release/starling.wasm wasm-artifacts/starling.wasm
-          cp build-debug/starling.wasm wasm-artifacts/starling-debug.wasm
+          cp ${{ matrix.builddir }}/starling.wasm wasm-artifacts/starling${{ matrix.variant != 'release' && '-debug' || '' }}.wasm
 
-          # Supporting artifacts
-          cp build-release/preview1-adapter.wasm wasm-artifacts/
+          # Supporting artifacts (only from release)
+          if [[ "${{ matrix.variant }}" == "release" ]]; then
+            cp ${{ matrix.builddir }}/preview1-adapter.wasm wasm-artifacts/
+          fi
 
           echo "WASM artifacts:"
           ls -lh wasm-artifacts/
 
       - name: Upload WASM Artifacts
+        if: matrix.variant == 'release' || (matrix.variant == 'debug' && steps.check_debug.outputs.build_debug == 'true')
         uses: actions/upload-artifact@v4
         with:
-          name: starling-wasm-artifacts
+          name: starling-wasm-${{ matrix.variant }}
           path: wasm-artifacts/*
           retention-days: 7
+          compression-level: 9
