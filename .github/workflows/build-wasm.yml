@@ -42,6 +42,7 @@ jobs:
         variant: ['release', 'debug']
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         with:
           fetch-tags: true
           fetch-depth: 0 # 0 indicates all history for all branches and tags
