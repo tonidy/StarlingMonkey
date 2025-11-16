@@ -96,6 +96,26 @@ jobs:
           echo "=== Original artifact sizes ==="
           ls -lh wasm-artifacts/
 
+            - name: Componentize User Code into index.wasm
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
+        run: |
+          BUILDDIR=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "build-release" || echo "build-debug" )
+
+          echo "✓ Copying user index.js into $BUILDDIR"
+          cp index.js $BUILDDIR/
+
+          echo "✓ Running componentize.sh to produce index.wasm"
+          cd $BUILDDIR
+          chmod +x ./componentize.sh
+          ./componentize.sh index.js -o index.wasm
+
+          echo "✓ Copying generated index.wasm to wasm-artifacts/"
+          cd ..
+          cp $BUILDDIR/index.wasm wasm-artifacts/index$( [[ "${{ matrix.variant }}" == "debug" ]] && echo "-debug" || echo "" ).wasm
+
+          echo "=== Componentized artifact sizes ==="
+          ls -lh wasm-artifacts/
+          
       - name: Extract Version Info
         if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         id: version_info
