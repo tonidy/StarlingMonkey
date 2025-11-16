@@ -127,8 +127,8 @@ jobs:
       - name: Embed Version Metadata in WASM
         if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
         run: |
-          BUILDDIR=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "build-release" || echo "build-debug" )
-          WASM_FILE=$BUILDDIR/starling$( [[ "${{ matrix.variant }}" == "debug" ]] && echo "-debug" || echo "" ).wasm
+          # Use WASM file from the wasm-artifacts directory
+          WASM_FILE=wasm-artifacts/starling$( [[ "${{ matrix.variant }}" == "debug" ]] && echo "-debug" || echo "" ).wasm
 
           # Embed version metadata into WASM binary
           wasm-tools metadata add \
@@ -145,7 +145,7 @@ jobs:
             "$WASM_FILE" -o "$WASM_FILE"
 
           echo "✓ Version metadata embedded in WASM binary"
-          wasm-tools metadata show "$WASM_FILE" | grep "processed-by" | head -10
+          wasm-tools metadata show "$WASM_FILE"
 
       - name: Create Compressed Archive
         if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
