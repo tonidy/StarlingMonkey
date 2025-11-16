@@ -96,7 +96,7 @@ jobs:
           echo "=== Original artifact sizes ==="
           ls -lh wasm-artifacts/
 
-            - name: Componentize User Code into index.wasm
+      - name: Componentize User Code into index.wasm
         if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         run: |
           BUILDDIR=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "build-release" || echo "build-debug" )
@@ -115,7 +115,7 @@ jobs:
 
           echo "=== Componentized artifact sizes ==="
           ls -lh wasm-artifacts/
-          
+
       - name: Extract Version Info
         if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         id: version_info
