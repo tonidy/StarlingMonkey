@@ -64,24 +64,24 @@ jobs:
         id: version_info
         run: |
           # Get StarlingMonkey version
-          STARLING_VERSION=$(jq -r '.["."]' .release-please-manifest.json)
-          echo "starling_version=$STARLING_VERSION" >> $GITHUB_OUTPUT
+          STARLING_VERSION=${{ github.event.release.tag_name }}
+          echo "starling_version=$STARLING_VERSION" >> $GITHUB_ENV
 
           # Get SpiderMonkey version
           SM_TAG=$(grep "^set(SM_TAG" cmake/spidermonkey.cmake | sed 's/.*SM_TAG \([^)]*\).*/\1/')
-          echo "spidermonkey_version=$SM_TAG" >> $GITHUB_OUTPUT
+          echo "spidermonkey_version=$SM_TAG" >> $GITHUB_ENV
 
           # Get Rust version
           RUST_VERSION=$(rustc --version | awk '{print $2}')
-          echo "rust_version=$RUST_VERSION" >> $GITHUB_OUTPUT
+          echo "rust_version=$RUST_VERSION" >> $GITHUB_ENV
 
           # Get git commit
           COMMIT=$(git rev-parse --short HEAD)
-          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+          echo "commit=$COMMIT" >> $GITHUB_ENV
 
           # Get build timestamp
           BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          echo "build_time=$BUILD_TIME" >> $GITHUB_OUTPUT
+          echo "build_time=$BUILD_TIME" >> $GITHUB_ENV
 
           echo "Version Info:"
           echo "  StarlingMonkey: $STARLING_VERSION"
@@ -98,15 +98,15 @@ jobs:
           # Embed version metadata into WASM binary
           wasm-tools metadata add \
             --language "rust=1.91.1" \
-            --processed-by "starlingmonkey=${{ steps.version_info.outputs.starling_version }}" \
-            --processed-by "spidermonkey=${{ steps.version_info.outputs.spidermonkey_version }}" \
+            --processed-by "starlingmonkey=${{ env.starling_version }}" \
+            --processed-by "spidermonkey=${{ env.spidermonkey_version }}" \
             --processed-by "wasmtime=v38.0.4" \
             --sdk "wasi-sdk=28" \
             --sdk "openssl=3.0.18" \
-            --revision "${{ steps.version_info.outputs.commit }}" \
+            --revision "${{ env.commit }}" \
             --homepage "https://github.com/tonidy/StarlingMonkey" \
             --description "StarlingMonkey: A SpiderMonkey-based JavaScript runtime for Wasm" \
-            --version "${{ steps.version_info.outputs.starling_version }}" \
+            --version "${{ env.starling_version }}" \
             "$WASM_FILE" -o "$WASM_FILE"
 
           echo "✓ Version metadata embedded in WASM binary"
@@ -114,9 +114,9 @@ jobs:
 
       - name: Create Compressed Archive
         run: |
-          tar -czf starling-wasm-${{ matrix.variant }}.tar.gz -C wasm-artifacts .
+          tar -czf starling-wasm-${{ matrix.variant }}-${{ env.starling_version }}.tar.gz -C wasm-artifacts .
           echo "=== Compressed archive size ==="
-          ls -lh starling-wasm-${{ matrix.variant }}.tar.gz
+          ls -lh starling-wasm-${{ matrix.variant }}-${{ env.starling_version }}.tar.gz
 
       - name: Upload WASM Release Asset
         uses: actions/upload-release-asset@v1
@@ -124,6 +124,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./starling-wasm-${{ matrix.variant }}.tar.gz
-          asset_name: starling-wasm-${{ matrix.variant }}.tar.gz
+          asset_path: ./starling-wasm-${{ matrix.variant }}-${{ env.starling_version }}.tar.gz
+          asset_name: starling-wasm-${{ matrix.variant }}-${{ env.starling_version }}.tar.gz
           asset_content_type: application/gzip

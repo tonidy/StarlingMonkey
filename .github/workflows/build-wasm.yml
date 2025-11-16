@@ -18,17 +18,16 @@ jobs:
   check-build-flags:
     name: Check Build Flags
     runs-on: ubuntu-latest
-    outputs:
+    env:
       build_release: 'true'
-      build_debug: ${{ steps.check_debug.outputs.build_debug }}
     steps:
       - name: Check if debug build requested
         id: check_debug
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.build_debug }}" == "true" ]]; then
-            echo "build_debug=true" >> $GITHUB_OUTPUT
+            echo "build_debug=true" >> $GITHUB_ENV
           else
-            echo "build_debug=false" >> $GITHUB_OUTPUT
+            echo "build_debug=false" >> $GITHUB_ENV
           fi
 
   build-wasm:
@@ -45,35 +44,35 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install Just
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         uses: taiki-e/install-action@just
 
       - name: Install wasm-tools
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: wasm-tools
 
       - name: Install Rust ${{ matrix.rust-version }}
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         run: |
           rustup toolchain install ${{ matrix.rust-version }}
           rustup target add wasm32-wasip2 --toolchain ${{ matrix.rust-version }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 #v4.4.0
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         with:
           node-version: 'lts/*'
 
       - name: Build ${{ matrix.variant }} Variant
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         run: |
           MODE=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "release" || echo "relwithdebinfo" )
           BUILDDIR=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "build-release" || echo "build-debug" )
           just mode=$MODE builddir=$BUILDDIR build starling
 
       - name: Prepare Artifacts
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         run: |
           mkdir -p wasm-artifacts
           BUILDDIR=$( [[ "${{ matrix.variant }}" == "release" ]] && echo "build-release" || echo "build-debug" )
@@ -94,28 +93,28 @@ jobs:
           ls -lh wasm-artifacts/
 
       - name: Extract Version Info
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         id: version_info
         run: |
           # Get StarlingMonkey version
-          STARLING_VERSION=$(jq -r '.["."]' .release-please-manifest.json)
-          echo "starling_version=$STARLING_VERSION" >> $GITHUB_OUTPUT
+          STARLING_VERSION=$(git tag --sort=-version:refname | head -n1)
+          echo "starling_version=$STARLING_VERSION" >> $GITHUB_ENV
 
           # Get SpiderMonkey version
           SM_TAG=$(grep "^set(SM_TAG" cmake/spidermonkey.cmake | sed 's/.*SM_TAG \([^)]*\).*/\1/')
-          echo "spidermonkey_version=$SM_TAG" >> $GITHUB_OUTPUT
+          echo "spidermonkey_version=$SM_TAG" >> $GITHUB_ENV
 
           # Get Rust version
           RUST_VERSION=$(rustc --version | awk '{print $2}')
-          echo "rust_version=$RUST_VERSION" >> $GITHUB_OUTPUT
+          echo "rust_version=$RUST_VERSION" >> $GITHUB_ENV
 
           # Get git commit
           COMMIT=$(git rev-parse --short HEAD)
-          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+          echo "commit=$COMMIT" >> $GITHUB_ENV
 
           # Get build timestamp
           BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          echo "build_time=$BUILD_TIME" >> $GITHUB_OUTPUT
+          echo "build_time=$BUILD_TIME" >> $GITHUB_ENV
 
           echo "Version Info:"
           echo "  StarlingMonkey: $STARLING_VERSION"
@@ -125,7 +124,7 @@ jobs:
           echo "  Built: $BUILD_TIME"
 
       - name: Embed Version Metadata in WASM
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         run: |
           # Use WASM file from the wasm-artifacts directory
           WASM_FILE=wasm-artifacts/starling$( [[ "${{ matrix.variant }}" == "debug" ]] && echo "-debug" || echo "" ).wasm
@@ -133,31 +132,31 @@ jobs:
           # Embed version metadata into WASM binary
           wasm-tools metadata add \
             --language "rust=1.91.1" \
-            --processed-by "starlingmonkey=${{ steps.version_info.outputs.starling_version }}" \
-            --processed-by "spidermonkey=${{ steps.version_info.outputs.spidermonkey_version }}" \
+            --processed-by "starlingmonkey=${{ env.starling_version }}" \
+            --processed-by "spidermonkey=${{ env.spidermonkey_version }}" \
             --processed-by "wasmtime=v38.0.4" \
             --sdk "wasi-sdk=28" \
             --sdk "openssl=3.0.18" \
-            --revision "${{ steps.version_info.outputs.commit }}" \
+            --revision "${{ env.commit }}" \
             --homepage "https://github.com/tonidy/StarlingMonkey" \
             --description "StarlingMonkey: A SpiderMonkey-based JavaScript runtime for Wasm" \
-            --version "${{ steps.version_info.outputs.starling_version }}" \
+            --version "${{ env.starling_version }}" \
             "$WASM_FILE" -o "$WASM_FILE"
 
           echo "✓ Version metadata embedded in WASM binary"
           wasm-tools metadata show "$WASM_FILE"
 
       - name: Create Compressed Archive
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         run: |
-          tar -czf starling-wasm-${{ matrix.variant }}.tar.gz -C wasm-artifacts .
+          tar -czf starling-wasm-${{ matrix.variant }}-${{ env.starling_version }}.tar.gz -C wasm-artifacts .
           echo "=== Compressed archive size ==="
-          ls -lh starling-wasm-${{ matrix.variant }}.tar.gz
+          ls -lh starling-wasm-${{ matrix.variant }}-${{ env.starling_version }}.tar.gz
 
       - name: Upload WASM Artifacts
-        if: matrix.variant != 'debug' || needs.check-build-flags.outputs.build_debug == 'true'
+        if: matrix.variant != 'debug' || needs.check-build-flags.env.build_debug == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: starling-wasm-${{ matrix.variant }}
-          path: starling-wasm-${{ matrix.variant }}.tar.gz
+          name: starling-wasm-${{ matrix.variant }}-${{ env.starling_version }}
+          path: starling-wasm-${{ matrix.variant }}-${{ env.starling_version }}.tar.gz
           retention-days: 7
