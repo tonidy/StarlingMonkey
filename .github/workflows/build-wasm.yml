@@ -97,7 +97,7 @@ jobs:
         id: version_info
         run: |
           # Get StarlingMonkey version
-          STARLING_VERSION=$(git tag --sort=-version:refname | head -n1)
+          STARLING_VERSION=$(git describe --tags)
           echo "starling_version=$STARLING_VERSION" >> $GITHUB_ENV
 
           # Get SpiderMonkey version
