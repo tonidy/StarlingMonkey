@@ -30,3 +30,5 @@
 /tests/integration/*/*.log
 /deps/*.lock
 /deps/*-source
+
+node_modules/
