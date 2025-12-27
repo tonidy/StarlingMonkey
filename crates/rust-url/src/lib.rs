@@ -1,6 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 /// Wrapper for the Url crate and a URLSearchParams implementation that enables use from C++.
+use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::slice;
 use url::{form_urlencoded, quirks, Url};
@@ -14,12 +15,22 @@ impl JSUrl {
     fn update_params(&self) {
         if let Some(params) = unsafe { self.params.as_mut() } {
             params.list = self.url.query_pairs().into_owned().collect();
+            if let UrlOrString::Url {
+                ref serialized_query_cache,
+                ..
+            } = params.url_or_str
+            {
+                *serialized_query_cache.borrow_mut() = None;
+            }
         }
     }
 }
 
 enum UrlOrString {
-    Url(*mut JSUrl),
+    Url {
+        url: *mut JSUrl,
+        serialized_query_cache: RefCell<Option<String>>,
+    },
     Str(String),
 }
 
@@ -36,7 +47,10 @@ impl JSUrlSearchParams {
     /// This is used in `params_to_string` to hand out a stable reference.
     fn update_url_or_str(&mut self) {
         match self.url_or_str {
-            UrlOrString::Url(url) => {
+            UrlOrString::Url {
+                url,
+                ref serialized_query_cache,
+            } => {
                 let url = unsafe { url.as_mut().unwrap() };
                 if self.list.is_empty() {
                     url.url.set_query(None);
@@ -45,6 +59,7 @@ impl JSUrlSearchParams {
                     pairs.clear();
                     pairs.extend_pairs(self.list.iter());
                 }
+                *serialized_query_cache.borrow_mut() = None;
             }
             UrlOrString::Str(_) => {
                 let str = if self.list.is_empty() {
@@ -222,7 +237,10 @@ pub unsafe extern "C" fn url_search_params(url: *mut JSUrl) -> *mut JSUrlSearchP
     if url.params.is_null() {
         url.params = Box::into_raw(Box::new(JSUrlSearchParams {
             list: url.url.query_pairs().into_owned().collect(),
-            url_or_str: UrlOrString::Url(url),
+            url_or_str: UrlOrString::Url {
+                url,
+                serialized_query_cache: RefCell::new(None),
+            },
         }));
     }
     url.params
@@ -391,6 +409,11 @@ pub extern "C" fn params_set(params: &mut JSUrlSearchParams, name: SpecString, v
 }
 
 #[no_mangle]
+pub extern "C" fn params_size(params: &JSUrlSearchParams) -> usize {
+    params.list.len()
+}
+
+#[no_mangle]
 pub extern "C" fn params_sort(params: &mut JSUrlSearchParams) {
     params
         .list
@@ -401,12 +424,17 @@ pub extern "C" fn params_sort(params: &mut JSUrlSearchParams) {
 #[no_mangle]
 pub extern "C" fn params_to_string(params: &JSUrlSearchParams) -> SpecSlice<'_> {
     match &params.url_or_str {
-        UrlOrString::Url(url) => {
-            let url = unsafe { url.as_mut().unwrap() };
-            match url.url.query() {
-                Some(query) => query.into(),
-                None => "".into(),
-            }
+        UrlOrString::Url {
+            serialized_query_cache,
+            ..
+        } => {
+            let mut cache = serialized_query_cache.borrow_mut();
+            let query = cache.get_or_insert_with(|| {
+                form_urlencoded::Serializer::new(String::new())
+                    .extend_pairs(&params.list)
+                    .finish()
+            });
+            SpecSlice::new(query.as_ptr(), query.len())
         }
         UrlOrString::Str(str) => str.as_str().into(),
     }
@@ -421,8 +449,10 @@ pub struct CVec<T> {
 
 impl<T> Drop for CVec<T> {
     fn drop(&mut self) {
-        unsafe {
-            self.ptr.drop_in_place();
+        if !self.ptr.is_null() && self.cap != 0 {
+            unsafe {
+                let _ = Vec::from_raw_parts(self.ptr, self.len, self.cap);
+            }
         }
     }
 }
@@ -467,8 +497,10 @@ impl<'a> From<&'a SpecString> for &'a str {
 
 impl Drop for SpecString {
     fn drop(&mut self) {
-        unsafe {
-            self.data.drop_in_place();
+        if !self.data.is_null() && self.cap != 0 {
+            unsafe {
+                let _ = String::from_raw_parts(self.data, self.len, self.cap);
+            }
         }
     }
 }
@@ -493,12 +525,7 @@ impl SpecSlice<'_> {
 
 impl<'a> From<&'a str> for SpecSlice<'a> {
     fn from(s: &'a str) -> SpecSlice<'a> {
-        let ptr = if !s.is_empty() {
-            s.as_ptr()
-        } else {
-            std::ptr::null()
-        };
-        SpecSlice::new(ptr, s.len())
+        SpecSlice::new(s.as_ptr(), s.len())
     }
 }
 
